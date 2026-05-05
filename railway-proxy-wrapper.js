@@ -39,7 +39,9 @@ app.post('/fetch', async (req, res) => {
 
     console.log(`[Proxy] ${method} ${url}`);
 
-    const proxyUrl = `socks5://${PROXY_USER}:${PROXY_PASS}@${PROXY_HOST}:${PROXY_PORT}`;
+    // Use HTTP proxy format (undici doesn't support SOCKS5)
+    const proxyUrl = `http://${PROXY_USER}:${PROXY_PASS}@${PROXY_HOST}:${PROXY_PORT}`;
+    console.log(`[Proxy] Using HTTP proxy: ${PROXY_HOST}:${PROXY_PORT}`);
     const dispatcher = new ProxyAgent(proxyUrl);
 
     const fetchOptions = {
