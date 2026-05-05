@@ -13,10 +13,10 @@ import { ProxyAgent } from 'undici';
 const app = express();
 app.use(express.json());
 
-const PROXY_HOST = process.env.PROXY_HOST = geo.iproyal.com
-const PROXY_PORT = process.env.PROXY_PORT = 12321
-const PROXY_USER = process.env.PROXY_USER = XYbRljOszUYnBz4z
-const PROXY_PASS = process.env.PROXY_PASS = 1DfaJvpJifpc5qbJ_country-ie_session-DnQG9bG2_lifetime-168h
+const PROXY_HOST = process.env.PROXY_HOST || 'geo.iproyal.com';
+const PROXY_PORT = process.env.PROXY_PORT || '12321';
+const PROXY_USER = process.env.PROXY_USER;
+const PROXY_PASS = process.env.PROXY_PASS;
 
 if (!PROXY_USER || !PROXY_PASS) {
   console.error('Missing PROXY_USER or PROXY_PASS env vars');
