@@ -1,0 +1,15 @@
+{
+  "name": "iproyal-proxy-wrapper",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Railway proxy wrapper for iProyal SOCKS5",
+  "main": "railway-proxy-wrapper.js",
+  "scripts": {
+    "start": "node railway-proxy-wrapper.js",
+    "dev": "node railway-proxy-wrapper.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "undici": "^6.19.0"
+  }
+}
