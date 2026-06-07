@@ -77,3 +77,26 @@ app.listen(PORT, () => {
   console.log(`[Railway] Proxy wrapper listening on port ${PORT}`);
   console.log(`[Proxy] Using ${PROXY_HOST}:${PROXY_PORT}`);
 });
+// Add this route to your Railway Express app:
+app.post('/fetch-poly', async (req, res) => {
+  const { url, method = 'GET', POLY_ADDRESS, POLY_SIGNATURE, POLY_TIMESTAMP, POLY_API_KEY, POLY_PASSPHRASE, body } = req.body;
+  
+  const headers = {
+    'POLY_ADDRESS': POLY_ADDRESS,
+    'POLY_SIGNATURE': POLY_SIGNATURE,
+    'POLY_TIMESTAMP': POLY_TIMESTAMP,
+    'POLY_API_KEY': POLY_API_KEY,
+    'POLY_PASSPHRASE': POLY_PASSPHRASE,
+    'Content-Type': 'application/json',
+  };
+
+  const response = await fetch(url, {
+    method,
+    headers,
+    body: body ? JSON.stringify(body) : undefined,
+    dispatcher: proxyAgent, // your existing SOCKS5 agent
+  });
+
+  const responseBody = await response.text();
+  res.json({ status: response.status, body: responseBody });
+});
