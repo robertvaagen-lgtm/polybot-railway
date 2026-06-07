@@ -61,7 +61,7 @@ app.post('/fetch-poly', async (req, res) => {
       POLY_TIMESTAMP,
       POLY_API_KEY,
       POLY_PASSPHRASE,
-      Content-Type = 'application/json'
+      'Content-Type': contentType = 'application/json'
     } = req.body;
     
     const parsedUrl = new URL(url);
@@ -69,7 +69,7 @@ app.post('/fetch-poly', async (req, res) => {
     
     // Build headers with EXACT uppercase names (critical for Polymarket L2 auth)
     const headers = {
-      'Content-Type': Content-Type,
+      'Content-Type': contentType,
     };
     
     // Only add POLY_* headers if they exist (preserves exact casing)
