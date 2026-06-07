@@ -1,57 +1,90 @@
-import express from 'express';
-import fetch from 'node-fetch';
-import https from 'https';
 import http from 'http';
+import https from 'https';
 import { URL } from 'url';
 
-const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Parse JSON bodies
-app.use(express.json({ limit: '10mb' }));
+// Health check
+function handleHealth(req, res) {
+  res.writeHead(200, { 'Content-Type': 'application/json' });
+  res.end(JSON.stringify({ status: 'ok', timestamp: Date.now() }));
+}
 
-// Health check endpoint
-app.get('/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: Date.now() });
-});
+// Parse JSON body
+function parseBody(req) {
+  return new Promise((resolve, reject) => {
+    let body = '';
+    req.on('data', chunk => body += chunk);
+    req.on('end', () => {
+      try {
+        resolve(body ? JSON.parse(body) : {});
+      } catch (e) {
+        reject(e);
+      }
+    });
+    req.on('error', reject);
+  });
+}
 
-// Original /fetch endpoint (uses node-fetch, normalizes headers to lowercase)
-app.post('/fetch', async (req, res) => {
+// Original /fetch endpoint (uses native fetch, normalizes headers)
+async function handleFetch(req, res) {
   try {
-    const { url, method = 'GET', headers = {}, body = null, poly_auth = {} } = req.body;
-    
-    // Merge poly_auth into headers (for backwards compatibility)
+    const data = await parseBody(req);
+    const { url, method = 'GET', headers = {}, body = null, poly_auth = {} } = data;
     const allHeaders = { ...headers, ...poly_auth };
     
+    const parsedUrl = new URL(url);
+    const isHttps = parsedUrl.protocol === 'https:';
+    const lib = isHttps ? https : http;
+    
     const options = {
-      method,
+      hostname: parsedUrl.hostname,
+      port: parsedUrl.port || (isHttps ? 443 : 80),
+      path: parsedUrl.pathname + parsedUrl.search,
+      method: method.toUpperCase(),
       headers: allHeaders,
       timeout: 25000,
     };
     
-    if (body && method !== 'GET') {
-      options.body = typeof body === 'string' ? body : JSON.stringify(body);
-    }
-    
-    const response = await fetch(url, options);
-    const responseText = await response.text();
-    
-    res.json({
-      status: response.status,
-      body: responseText,
-      headers: Object.fromEntries(response.headers.entries())
+    const requestPromise = new Promise((resolve, reject) => {
+      const request = lib.request(options, (response) => {
+        let responseData = '';
+        response.on('data', chunk => responseData += chunk);
+        response.on('end', () => {
+          resolve({
+            status: response.statusCode,
+            body: responseData,
+            headers: response.headers
+          });
+        });
+      });
+      
+      request.on('error', reject);
+      request.on('timeout', () => {
+        request.destroy();
+        reject(new Error('Request timeout'));
+      });
+      
+      if (body && ['POST', 'PUT', 'PATCH'].includes(method.toUpperCase())) {
+        request.write(typeof body === 'string' ? body : JSON.stringify(body));
+      }
+      request.end();
     });
+    
+    const result = await requestPromise;
+    
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify(result));
   } catch (error) {
-    res.status(500).json({
-      error: error.message,
-      code: error.code || 'UNKNOWN_ERROR'
-    });
+    res.writeHead(500, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: error.message, code: error.code || 'UNKNOWN_ERROR' }));
   }
-});
+}
 
-// NEW /fetch-poly endpoint - uses raw https/http modules to preserve exact header casing
-app.post('/fetch-poly', async (req, res) => {
+// NEW /fetch-poly endpoint - preserves exact uppercase header names
+async function handleFetchPoly(req, res) {
   try {
+    const data = await parseBody(req);
     const { 
       url, 
       method = 'GET', 
@@ -62,17 +95,13 @@ app.post('/fetch-poly', async (req, res) => {
       POLY_API_KEY,
       POLY_PASSPHRASE,
       'Content-Type': contentType = 'application/json'
-    } = req.body;
+    } = data;
     
     const parsedUrl = new URL(url);
     const isHttps = parsedUrl.protocol === 'https:';
     
     // Build headers with EXACT uppercase names (critical for Polymarket L2 auth)
-    const headers = {
-      'Content-Type': contentType,
-    };
-    
-    // Only add POLY_* headers if they exist (preserves exact casing)
+    const headers = { 'Content-Type': contentType };
     if (POLY_ADDRESS) headers['POLY_ADDRESS'] = POLY_ADDRESS;
     if (POLY_SIGNATURE) headers['POLY_SIGNATURE'] = POLY_SIGNATURE;
     if (POLY_TIMESTAMP) headers['POLY_TIMESTAMP'] = POLY_TIMESTAMP;
@@ -91,52 +120,55 @@ app.post('/fetch-poly', async (req, res) => {
     const lib = isHttps ? https : http;
     
     const requestPromise = new Promise((resolve, reject) => {
-      const req = lib.request(options, (response) => {
-        let data = '';
-        
-        response.on('data', (chunk) => {
-          data += chunk;
-        });
-        
+      const request = lib.request(options, (response) => {
+        let responseData = '';
+        response.on('data', chunk => responseData += chunk);
         response.on('end', () => {
           resolve({
             status: response.statusCode,
-            body: data,
+            body: responseData,
             headers: response.headers
           });
         });
       });
       
-      request.on('error', (error) => {
-        reject(error);
-      });
-      
+      request.on('error', reject);
       request.on('timeout', () => {
         request.destroy();
         reject(new Error('Request timeout'));
       });
       
-      // Send body for POST/PUT/PATCH requests
       if (body && ['POST', 'PUT', 'PATCH'].includes(method.toUpperCase())) {
         request.write(typeof body === 'string' ? body : JSON.stringify(body));
       }
-      
       request.end();
     });
     
     const result = await requestPromise;
     
-    res.json(result);
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify(result));
   } catch (error) {
-    res.status(500).json({
-      error: error.message,
-      code: error.code || 'UNKNOWN_ERROR'
-    });
+    res.writeHead(500, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: error.message, code: error.code || 'UNKNOWN_ERROR' }));
+  }
+}
+
+// Create server
+const server = http.createServer(async (req, res) => {
+  if (req.method === 'GET' && req.url === '/health') {
+    handleHealth(req, res);
+  } else if (req.method === 'POST' && req.url === '/fetch') {
+    await handleFetch(req, res);
+  } else if (req.method === 'POST' && req.url === '/fetch-poly') {
+    await handleFetchPoly(req, res);
+  } else {
+    res.writeHead(404, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: 'Not found' }));
   }
 });
 
-// Start server
-app.listen(PORT, () => {
+server.listen(PORT, () => {
   console.log(`Proxy server running on port ${PORT}`);
   console.log(`Endpoints available: /health, /fetch, /fetch-poly`);
 });
