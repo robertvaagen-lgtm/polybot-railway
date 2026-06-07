@@ -1,8 +1,8 @@
-const express = require('express');
-const fetch = require('node-fetch');
-const https = require('https');
-const http = require('http');
-const { URL } = require('url');
+import express from 'express';
+import fetch from 'node-fetch';
+import https from 'https';
+import http from 'http';
+import { URL } from 'url';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
